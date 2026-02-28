@@ -1,66 +1,446 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-    <title>Star Platinum Test</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JoJo's Bizarre Adventure - Web</title>
     <style>
-        body { margin: 0; background: #111; overflow: hidden; color: white; font-family: sans-serif; }
-        canvas { display: block; }
-        #status { position: absolute; top: 10px; left: 10px; font-size: 20px; }
+        /* ESTILO RETRÔ ARCADE / PS1 */
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            background-color: #111;
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Container principal */
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 450px;
+            box-shadow: 0 0 20px rgba(150, 0, 255, 0.5);
+        }
+
+        canvas {
+            background: linear-gradient(to bottom, #2b1055, #7597de);
+            display: block;
+        }
+
+        /* Efeito de TV de Tubo (CRT) */
+        #game-container::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        /* UI do Jogo */
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+        
+        .health-bars {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+        }
+
+        .hp-box { width: 40%; border: 4px solid #fff; background: red; height: 25px; position: relative; }
+        .hp-fill { height: 100%; background: #ffea00; transition: width 0.2s ease-out; width: 100%; }
+        
+        /* Direções diferentes para P1 e P2 */
+        #p1-hp { float: right; transform-origin: right; }
+        
+        .names { display: flex; justify-content: space-between; padding: 0 20px; font-size: 12px; text-shadow: 2px 2px #000; }
+
+        /* Telas de Menu e KO */
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 4; text-align: center;
+        }
+
+        button {
+            margin-top: 20px; padding: 15px 30px; font-family: 'Press Start 2P', cursive;
+            background: transparent; color: #ffea00; border: 4px solid #ffea00;
+            cursor: pointer; pointer-events: auto;
+        }
+        button:hover { background: #ffea00; color: #000; }
+
+        #timer { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 24px; text-shadow: 2px 2px #000; }
     </style>
 </head>
 <body>
-    <div id="status">Pressione 'T' para PARAR O TEMPO!</div>
-    <canvas id="gameCanvas"></canvas>
+
+    <div id="game-container">
+        <div id="ui" class="ui-layer" style="display: none;">
+            <div class="health-bars">
+                <div class="hp-box"><div id="p1-hp" class="hp-fill"></div></div>
+                <div class="hp-box"><div id="p2-hp" class="hp-fill"></div></div>
+            </div>
+            <div class="names">
+                <span id="p1-name">JOTARO</span>
+                <span id="p2-name">DIO</span>
+            </div>
+            <div id="timer">99</div>
+        </div>
+
+        <div id="overlay">
+            <h1 style="color: #ff00ff; text-shadow: 4px 4px #000;">JOJO WEB HERITAGE</h1>
+            <p style="font-size: 10px; line-height: 1.5;">
+                P1: WASD move | F soco | G especial | T troca char<br>
+                P2: Setas move | L soco | K especial
+            </p>
+            <button onclick="startGame()">START GAME</button>
+        </div>
+
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+    </div>
 
     <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Elementos da UI
+        const overlay = document.getElementById('overlay');
+        const ui = document.getElementById('ui');
+        const p1HpBar = document.getElementById('p1-hp');
+        const p2HpBar = document.getElementById('p2-hp');
+        const p1NameTag = document.getElementById('p1-name');
 
-        let timeStopped = false;
-        let player = { x: 100, y: 100, size: 30, color: "#00f" };
-        let enemies = [];
+        let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER
+        let timeStopOwner = null; // Controla o Time Stop
+        let timeStopTimer = 0;
+        let vfxTexts = []; // Efeitos visuais (ORA ORA / MUDA MUDA)
 
-        // Criar inimigos aleatórios
-        for(let i=0; i<10; i++) {
-            enemies.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, vx: 2, vy: 2 });
+        const GRAVITY = 0.7;
+        const FLOOR = 380;
+
+        // Banco de Dados de Personagens
+        const CHARACTERS = {
+            jotaro: {
+                name: "JOTARO", color: "#1c2a43", standColor: "rgba(128, 0, 128, 0.7)", 
+                shout: "ORA!", specialSound: "STAR PLATINUM: ZA WARUDO!"
+            },
+            dio: {
+                name: "DIO", color: "#e2c222", standColor: "rgba(255, 215, 0, 0.7)", 
+                shout: "MUDA!", specialSound: "ZA WARUDO! TOKI YO TOMARE!"
+            },
+            polnareff: { // Personagem extra para a mecânica de troca
+                name: "POLNAREFF", color: "#e6e6ea", standColor: "rgba(192, 192, 192, 0.7)", 
+                shout: "HORA!", specialSound: "SILVER CHARIOT!"
+            }
+        };
+
+        class Fighter {
+            constructor(x, y, charKey, isP1) {
+                this.x = x;
+                this.y = y;
+                this.width = 50;
+                this.height = 100;
+                this.isP1 = isP1;
+                this.facing = isP1 ? 1 : -1;
+                
+                // Atributos de Combate
+                this.hp = 100;
+                this.velocity = { x: 0, y: 0 };
+                this.speed = 5;
+                this.jumpPower = -14;
+                
+                // Estados
+                this.isJumping = false;
+                this.isAttacking = false;
+                this.attackCooldown = 0;
+                
+                this.loadCharacter(charKey);
+            }
+
+            loadCharacter(charKey) {
+                const data = CHARACTERS[charKey];
+                this.name = data.name;
+                this.color = data.color;
+                this.standColor = data.standColor;
+                this.shout = data.shout;
+                this.specialSound = data.specialSound;
+            }
+
+            update() {
+                // Se o tempo estiver parado por outro jogador, congela
+                if (timeStopOwner !== null && timeStopOwner !== this) return;
+
+                // Físicas
+                this.velocity.y += GRAVITY;
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+
+                // Colisão com o chão
+                if (this.y + this.height >= FLOOR) {
+                    this.y = FLOOR - this.height;
+                    this.velocity.y = 0;
+                    this.isJumping = false;
+                }
+
+                // Limites da tela
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+
+                // Cooldown do ataque
+                if (this.attackCooldown > 0) this.attackCooldown--;
+                if (this.attackCooldown === 0) this.isAttacking = false;
+            }
+
+            draw() {
+                // Efeito do Stand durante ataque
+                if (this.isAttacking) {
+                    ctx.fillStyle = this.standColor;
+                    // Stand aparece levemente à frente
+                    ctx.fillRect(this.x + (40 * this.facing), this.y - 10, this.width + 20, this.height + 10);
+                }
+
+                // Desenhar lutador
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+
+                // Olhos (para mostrar direção)
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(this.x + (this.facing === 1 ? 30 : 10), this.y + 10, 10, 10);
+                
+                // Hitbox de ataque
+                if (this.isAttacking) {
+                    ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
+                    ctx.fillRect(this.x + (this.width * this.facing), this.y + 20, 60, 40);
+                }
+            }
+
+            attack(enemy) {
+                if (this.attackCooldown === 0) {
+                    this.isAttacking = true;
+                    this.attackCooldown = 20;
+
+                    // Criar texto do golpe
+                    vfxTexts.push({
+                        text: this.shout,
+                        x: this.x + (80 * this.facing),
+                        y: this.y + 20 + Math.random() * 40,
+                        life: 30
+                    });
+
+                    // Checar colisão (Simples)
+                    let attackBox = {
+                        x: this.facing === 1 ? this.x + this.width : this.x - 60,
+                        y: this.y + 20,
+                        w: 60, h: 40
+                    };
+
+                    if (attackBox.x < enemy.x + enemy.width &&
+                        attackBox.x + attackBox.w > enemy.x &&
+                        attackBox.y < enemy.y + enemy.height &&
+                        attackBox.y + attackBox.h > enemy.y) {
+                        
+                        // Sofreu Dano
+                        enemy.hp -= 5;
+                        if (enemy.hp < 0) enemy.hp = 0;
+                        updateHealthBars();
+                        
+                        // Empurrãozinho
+                        enemy.x += 10 * this.facing;
+                    }
+                }
+            }
+
+            special() {
+                // Time Stop
+                if (timeStopOwner === null) {
+                    timeStopOwner = this;
+                    timeStopTimer = 180; // 3 segundos (a 60 fps)
+                    
+                    vfxTexts.push({
+                        text: this.specialSound,
+                        x: canvas.width / 2 - 150,
+                        y: canvas.height / 2,
+                        life: 60,
+                        isGiant: true
+                    });
+                }
+            }
         }
 
-        window.addEventListener("keydown", (e) => {
-            if (e.key.toLowerCase() === "t") {
-                timeStopped = !timeStopped;
-                document.getElementById("status").innerText = timeStopped ? "ZA WARUDO! (Tempo Parado)" : "O tempo voltou a correr...";
-                document.body.style.filter = timeStopped ? "invert(100%)" : "none"; // Efeito visual de negativo
+        let player1, player2;
+
+        // Controles Pressionados
+        const keys = {
+            a: false, d: false, w: false, 
+            ArrowLeft: false, ArrowRight: false, ArrowUp: false
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (gameState !== 'PLAYING') return;
+
+            // Movimento P1
+            if (e.key === 'a') keys.a = true;
+            if (e.key === 'd') keys.d = true;
+            if (e.key === 'w' && !player1.isJumping) { player1.velocity.y = player1.jumpPower; player1.isJumping = true; }
+            
+            // Movimento P2
+            if (e.key === 'ArrowLeft') keys.ArrowLeft = true;
+            if (e.key === 'ArrowRight') keys.ArrowRight = true;
+            if (e.key === 'ArrowUp' && !player2.isJumping) { player2.velocity.y = player2.jumpPower; player2.isJumping = true; }
+
+            // Ações P1
+            if (e.key === 'f') player1.attack(player2);
+            if (e.key === 'g') player1.special();
+            
+            // Mecânica de Troca (Tag System) P1
+            if (e.key === 't') {
+                const newChar = player1.name === "JOTARO" ? "polnareff" : "jotaro";
+                player1.loadCharacter(newChar);
+                p1NameTag.innerText = player1.name;
+                vfxTexts.push({ text: "CHANGE!", x: player1.x, y: player1.y - 20, life: 40 });
             }
+
+            // Ações P2
+            if (e.key === 'l') player2.attack(player1);
+            if (e.key === 'k') player2.special();
         });
 
-        function update() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'a') keys.a = false;
+            if (e.key === 'd') keys.d = false;
+            if (e.key === 'ArrowLeft') keys.ArrowLeft = false;
+            if (e.key === 'ArrowRight') keys.ArrowRight = false;
+        });
 
-            // Desenhar Jogador (Sempre se move)
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.size, player.size);
+        function updateHealthBars() {
+            p1HpBar.style.width = player1.hp + '%';
+            p2HpBar.style.width = player2.hp + '%';
 
-            // Seguir o mouse
-            window.onmousemove = (e) => { player.x = e.clientX; player.y = e.clientY; };
-
-            // Desenhar Inimigos
-            enemies.forEach(en => {
-                if (!timeStopped) { // Só movem se o tempo não estiver parado
-                    en.x += en.vx; en.y += en.vy;
-                    if(en.x > canvas.width || en.x < 0) en.vx *= -1;
-                    if(en.y > canvas.height || en.y < 0) en.vy *= -1;
-                }
-                ctx.fillStyle = "#f00";
-                ctx.beginPath();
-                ctx.arc(en.x, en.y, 15, 0, Math.PI*2);
-                ctx.fill();
-            });
-
-            requestAnimationFrame(update);
+            if (player1.hp <= 0 || player2.hp <= 0) {
+                endGame(player1.hp <= 0 ? "P2 VENCEU!" : "P1 VENCEU!");
+            }
         }
-        update();
+
+        function startGame() {
+            overlay.style.display = 'none';
+            ui.style.display = 'block';
+            
+            player1 = new Fighter(100, 100, "jotaro", true);
+            player2 = new Fighter(600, 100, "dio", false);
+            
+            p1HpBar.style.width = '100%';
+            p2HpBar.style.width = '100%';
+            p1NameTag.innerText = "JOTARO";
+            
+            timeStopOwner = null;
+            timeStopTimer = 0;
+            vfxTexts = [];
+            
+            gameState = 'PLAYING';
+            gameLoop();
+        }
+
+        function endGame(message) {
+            gameState = 'GAMEOVER';
+            ui.style.display = 'none';
+            overlay.style.display = 'flex';
+            overlay.innerHTML = `
+                <h1 style="color: #ff0000; font-size: 50px;">K.O.</h1>
+                <h2>${message}</h2>
+                <button onclick="location.reload()">REVANCHE</button>
+            `;
+        }
+
+        function handleMovement() {
+            // P1 Movimentação
+            if (keys.a) { player1.velocity.x = -player1.speed; player1.facing = -1; }
+            else if (keys.d) { player1.velocity.x = player1.speed; player1.facing = 1; }
+            else { player1.velocity.x = 0; }
+
+            // P2 Movimentação
+            if (keys.ArrowLeft) { player2.velocity.x = -player2.speed; player2.facing = -1; }
+            else if (keys.ArrowRight) { player2.velocity.x = player2.speed; player2.facing = 1; }
+            else { player2.velocity.x = 0; }
+
+            // Sempre olhar um pro outro se não estiverem se movendo ativamente
+            if (!keys.a && !keys.d) {
+                player1.facing = player1.x < player2.x ? 1 : -1;
+            }
+            if (!keys.ArrowLeft && !keys.ArrowRight) {
+                player2.facing = player2.x < player1.x ? 1 : -1;
+            }
+        }
+
+        function drawBackground() {
+            // Se o tempo estiver parado, inverte as cores (Efeito ZA WARUDO)
+            if (timeStopTimer > 0) {
+                ctx.filter = 'invert(1) grayscale(100%)';
+            } else {
+                ctx.filter = 'none';
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Chão
+            ctx.fillStyle = "#333";
+            ctx.fillRect(0, FLOOR, canvas.width, canvas.height - FLOOR);
+
+            // Linha do chão arcade
+            ctx.strokeStyle = "#ff00ff";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, FLOOR);
+            ctx.lineTo(canvas.width, FLOOR);
+            ctx.stroke();
+        }
+
+        function drawVFX() {
+            for (let i = vfxTexts.length - 1; i >= 0; i--) {
+                let vfx = vfxTexts[i];
+                ctx.fillStyle = "#ffea00";
+                ctx.font = vfx.isGiant ? "20px 'Press Start 2P'" : "10px 'Press Start 2P'";
+                
+                // Contorno preto
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = "#000";
+                ctx.strokeText(vfx.text, vfx.x, vfx.y);
+                ctx.fillText(vfx.text, vfx.x, vfx.y);
+
+                vfx.y -= 1; // Sobe flutuando
+                vfx.life--;
+                if (vfx.life <= 0) vfxTexts.splice(i, 1);
+            }
+        }
+
+        function gameLoop() {
+            if (gameState !== 'PLAYING') return;
+
+            // Atualiza Time Stop
+            if (timeStopTimer > 0) {
+                timeStopTimer--;
+                if (timeStopTimer <= 0) timeStopOwner = null;
+            }
+
+            handleMovement();
+
+            player1.update();
+            player2.update();
+
+            drawBackground();
+            player1.draw();
+            player2.draw();
+            drawVFX();
+
+            requestAnimationFrame(gameLoop);
+        }
     </script>
 </body>
 </html>
