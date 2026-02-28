@@ -3,444 +3,661 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JoJo's Bizarre Adventure - Web</title>
+    <title>JoJo's Bizarre Adventure - Advanced Engine</title>
     <style>
-        /* ESTILO RETRÔ ARCADE / PS1 */
+        /* ESTÉTICA ARCADE CRT */
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
         body {
-            margin: 0;
-            background-color: #111;
-            color: white;
-            font-family: 'Press Start 2P', cursive;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
+            margin: 0; background-color: #050505; color: white;
+            font-family: 'Press Start 2P', monospace;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden; user-select: none;
         }
-
-        /* Container principal */
-        #game-container {
-            position: relative;
-            width: 800px;
-            height: 450px;
-            box-shadow: 0 0 20px rgba(150, 0, 255, 0.5);
+        #game-wrapper {
+            position: relative; width: 800px; height: 450px;
+            box-shadow: 0 0 30px rgba(100, 50, 255, 0.4);
+            border: 4px solid #333;
         }
-
-        canvas {
-            background: linear-gradient(to bottom, #2b1055, #7597de);
-            display: block;
-        }
-
-        /* Efeito de TV de Tubo (CRT) */
-        #game-container::after {
-            content: " ";
-            display: block;
-            position: absolute;
-            top: 0; left: 0; bottom: 0; right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 2;
-            background-size: 100% 4px, 6px 100%;
-            pointer-events: none;
-        }
-
-        /* UI do Jogo */
-        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+        canvas { background: #1a1a2e; display: block; }
         
-        .health-bars {
-            display: flex;
-            justify-content: space-between;
-            padding: 20px;
+        /* CRT Overlay */
+        #game-wrapper::after {
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%; pointer-events: none; z-index: 10;
         }
 
-        .hp-box { width: 40%; border: 4px solid #fff; background: red; height: 25px; position: relative; }
-        .hp-fill { height: 100%; background: #ffea00; transition: width 0.2s ease-out; width: 100%; }
+        /* UI STRUTURE */
+        .ui { position: absolute; top: 0; width: 100%; z-index: 5; padding: 10px; box-sizing: border-box; }
+        .hud-top { display: flex; justify-content: space-between; align-items: flex-start; }
         
-        /* Direções diferentes para P1 e P2 */
-        #p1-hp { float: right; transform-origin: right; }
+        .player-hud { width: 40%; }
+        .name { font-size: 14px; text-shadow: 2px 2px 0 #000; margin-bottom: 5px; color: #ffeb3b; }
         
-        .names { display: flex; justify-content: space-between; padding: 0 20px; font-size: 12px; text-shadow: 2px 2px #000; }
+        /* Health & Guard Bars */
+        .bar-container { border: 2px solid #fff; background: #222; height: 20px; margin-bottom: 4px; position: relative; }
+        .health-fill { height: 100%; background: #e53935; transition: width 0.1s linear; width: 100%; }
+        .guard-fill { height: 6px; background: #03a9f4; width: 100%; transition: width 0.1s linear; }
+        .guard-container { border: 1px solid #777; background: #111; height: 6px; }
+        
+        #p1-hud { text-align: left; }
+        #p2-hud { text-align: right; }
+        #p1-hud .health-fill, #p1-hud .guard-fill { transform-origin: left; }
+        #p2-hud .health-fill, #p2-hud .guard-fill { float: right; transform-origin: right; }
 
-        /* Telas de Menu e KO */
-        #overlay {
+        /* Cooldowns UI */
+        .cooldowns { display: flex; gap: 5px; margin-top: 5px; }
+        #p2-hud .cooldowns { justify-content: flex-end; }
+        .cd-box { width: 30px; height: 30px; background: rgba(0,0,0,0.5); border: 1px solid #fff; position: relative; font-size: 8px; display: flex; align-items: center; justify-content: center; text-align: center;}
+        .cd-overlay { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(255,0,0,0.6); height: 0%; transition: height 0.1s linear; }
+        .cd-text { z-index: 2; position: relative; }
+
+        /* Screens */
+        .screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 4; text-align: center;
+            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 20; text-align: center;
         }
-
+        .hidden { display: none !important; }
         button {
-            margin-top: 20px; padding: 15px 30px; font-family: 'Press Start 2P', cursive;
-            background: transparent; color: #ffea00; border: 4px solid #ffea00;
-            cursor: pointer; pointer-events: auto;
+            margin: 10px; padding: 15px 30px; font-family: 'Press Start 2P'; background: transparent;
+            color: #fff; border: 2px solid #fff; cursor: pointer; transition: 0.2s;
         }
-        button:hover { background: #ffea00; color: #000; }
-
-        #timer { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 24px; text-shadow: 2px 2px #000; }
+        button:hover, button.active { background: #ffeb3b; color: #000; border-color: #ffeb3b; }
+        .controls-info { font-size: 10px; line-height: 1.8; color: #aaa; margin-top: 20px; text-align: left;}
+        .highlight { color: #ffeb3b; }
     </style>
 </head>
 <body>
 
-    <div id="game-container">
-        <div id="ui" class="ui-layer" style="display: none;">
-            <div class="health-bars">
-                <div class="hp-box"><div id="p1-hp" class="hp-fill"></div></div>
-                <div class="hp-box"><div id="p2-hp" class="hp-fill"></div></div>
+<div id="game-wrapper">
+    <div id="ui" class="ui hidden">
+        <div class="hud-top">
+            <div class="player-hud" id="p1-hud">
+                <div class="name">JOTARO (P1)</div>
+                <div class="bar-container"><div class="health-fill" id="p1-hp"></div></div>
+                <div class="guard-container"><div class="guard-fill" id="p1-guard"></div></div>
+                <div class="cooldowns" id="p1-cds"></div>
             </div>
-            <div class="names">
-                <span id="p1-name">JOTARO</span>
-                <span id="p2-name">DIO</span>
+            <div style="font-size: 30px; color: yellow; text-shadow: 3px 3px 0 #000;">VS</div>
+            <div class="player-hud" id="p2-hud">
+                <div class="name">DIO (AI)</div>
+                <div class="bar-container"><div class="health-fill" id="p2-hp"></div></div>
+                <div class="guard-container"><div class="guard-fill" id="p2-guard"></div></div>
+                <div class="cooldowns" id="p2-cds"></div>
             </div>
-            <div id="timer">99</div>
         </div>
-
-        <div id="overlay">
-            <h1 style="color: #ff00ff; text-shadow: 4px 4px #000;">JOJO WEB HERITAGE</h1>
-            <p style="font-size: 10px; line-height: 1.5;">
-                P1: WASD move | F soco | G especial | T troca char<br>
-                P2: Setas move | L soco | K especial
-            </p>
-            <button onclick="startGame()">START GAME</button>
-        </div>
-
-        <canvas id="gameCanvas" width="800" height="450"></canvas>
     </div>
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+    <div id="start-screen" class="screen">
+        <h1 style="color: #ff00ff; text-shadow: 4px 4px 0px #000; margin-bottom: 0;">HERITAGE</h1>
+        <h2 style="color: #fff; font-size: 14px; margin-bottom: 30px;">ADVANCED BATTLE</h2>
         
-        // Elementos da UI
-        const overlay = document.getElementById('overlay');
-        const ui = document.getElementById('ui');
-        const p1HpBar = document.getElementById('p1-hp');
-        const p2HpBar = document.getElementById('p2-hp');
-        const p1NameTag = document.getElementById('p1-name');
+        <div>
+            <p style="font-size: 12px; margin-bottom: 10px;">DIFICULDADE DA IA</p>
+            <button id="btn-easy" onclick="setDiff(1)">FÁCIL</button>
+            <button id="btn-med" class="active" onclick="setDiff(2)">MÉDIO</button>
+            <button id="btn-hard" onclick="setDiff(3)">DIFÍCIL</button>
+        </div>
+        
+        <button onclick="initGame()" style="margin-top: 30px; border-color: #ff00ff; color: #ff00ff;">FIGHT!</button>
 
-        let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER
-        let timeStopOwner = null; // Controla o Time Stop
-        let timeStopTimer = 0;
-        let vfxTexts = []; // Efeitos visuais (ORA ORA / MUDA MUDA)
+        <div class="controls-info">
+            <span class="highlight">MOVIMENTO:</span> W, A, S, D<br>
+            <span class="highlight">DEFESA:</span> Segurar para trás (A ou D dependendo do lado)<br>
+            <span class="highlight">STAND ON/OFF:</span> E<br>
+            <span class="highlight">NORMAL L/M/H:</span> U, I, O<br>
+            <span class="highlight">ORA-ORA:</span> S, D, U (QCF+L) | <span class="highlight">MACH-ORA:</span> S, A, I (QCB+M)<br>
+            <span class="highlight">STAR FINGER:</span> D, S, D, U (SRK+L)<br>
+            <span class="highlight">TIME STOP (Super):</span> S, S, E (Requer Stand ON)
+        </div>
+    </div>
 
-        const GRAVITY = 0.7;
-        const FLOOR = 380;
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+</div>
 
-        // Banco de Dados de Personagens
-        const CHARACTERS = {
-            jotaro: {
-                name: "JOTARO", color: "#1c2a43", standColor: "rgba(128, 0, 128, 0.7)", 
-                shout: "ORA!", specialSound: "STAR PLATINUM: ZA WARUDO!"
-            },
-            dio: {
-                name: "DIO", color: "#e2c222", standColor: "rgba(255, 215, 0, 0.7)", 
-                shout: "MUDA!", specialSound: "ZA WARUDO! TOKI YO TOMARE!"
-            },
-            polnareff: { // Personagem extra para a mecânica de troca
-                name: "POLNAREFF", color: "#e6e6ea", standColor: "rgba(192, 192, 192, 0.7)", 
-                shout: "HORA!", specialSound: "SILVER CHARIOT!"
+<script>
+/**
+ * JOJO'S BIZARRE ADVENTURE - ADVANCED ENGINE
+ * Features: Frame Data, Hitboxes, Input Buffer (Motions), Guard, Parry, Cooldowns, AI.
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const FLOOR = 400;
+let gameState = 'START'; // START, PLAYING, GAMEOVER
+let aiDifficulty = 2; // 1: Easy, 2: Med, 3: Hard
+
+function setDiff(lvl) {
+    aiDifficulty = lvl;
+    document.querySelectorAll('#start-screen button').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+}
+
+// --- BANCO DE DADOS DE MOVIMENTOS (FRAME DATA) ---
+// startup: frames até o golpe bater
+// active: frames que o golpe dá dano
+// recovery: frames vulneráveis após o golpe
+// damage: dano base
+// blockstun/hitstun: frames que o inimigo fica travado
+// pushback: força que empurra o inimigo
+const MOVEDB = {
+    // Normais
+    'STAND_TOGGLE': { name: 'Stand', startup: 2, active: 0, recovery: 10, type: 'util' },
+    'LIGHT':  { name: 'Jab', startup: 4, active: 3, recovery: 8, damage: 3, hitbox: {w:40, h:20, x:30, y:20}, hitstun: 12, blockstun: 10, pushback: 2 },
+    'MEDIUM': { name: 'Hook', startup: 7, active: 4, recovery: 12, damage: 6, hitbox: {w:50, h:25, x:30, y:20}, hitstun: 16, blockstun: 14, pushback: 4 },
+    'HEAVY':  { name: 'Kick', startup: 10, active: 5, recovery: 18, damage: 10, hitbox: {w:60, h:30, x:30, y:60}, hitstun: 20, blockstun: 18, pushback: 8 },
+    
+    // Especiais (Movelist Jotaro)
+    'ORA_ORA': { 
+        name: 'Ora-Ora', input: 'QCF+L', startup: 8, active: 40, recovery: 20, damage: 2, hits: 8, 
+        hitbox: {w: 70, h: 60, x: 40, y: 10}, hitstun: 10, blockstun: 10, pushback: 1, cooldown: 180, color: '#aa00ff'
+    },
+    'MACH_ORA': { 
+        name: 'Mach-Ora', input: 'QCB+M', startup: 12, active: 15, recovery: 25, damage: 15, 
+        hitbox: {w: 60, h: 40, x: 50, y: 20}, hitstun: 25, blockstun: 20, pushback: 15, propel: 12, cooldown: 240, color: '#ff00aa', armor: true 
+    },
+    'STAR_FINGER': { 
+        name: 'Star Finger', input: 'SRK+L', startup: 10, active: 5, recovery: 30, damage: 12, 
+        hitbox: {w: 150, h: 15, x: 40, y: 15}, hitstun: 30, blockstun: 20, pushback: 5, cooldown: 300, color: '#00e5ff'
+    },
+    'TIME_STOP': {
+        name: 'Za Warudo', input: 'D,D+S', startup: 5, active: 0, recovery: 30, damage: 0, 
+        cooldown: 900, type: 'super', duration: 180, invuln: true
+    }
+};
+
+// --- INPUT BUFFER SYSTEM ---
+// Registra os últimos inputs para detectar QCF (Meia-lua) e SRK
+class InputManager {
+    constructor() {
+        this.buffer = [];
+        this.keys = { w:0, a:0, s:0, d:0, u:0, i:0, o:0, e:0 };
+        
+        window.addEventListener('keydown', e => {
+            const k = e.key.toLowerCase();
+            if(this.keys[k] !== undefined && this.keys[k] === 0) {
+                this.keys[k] = 1;
+                this.buffer.push({ key: k, time: Date.now() });
+                if(this.buffer.length > 15) this.buffer.shift();
             }
-        };
+        });
+        window.addEventListener('keyup', e => {
+            const k = e.key.toLowerCase();
+            if(this.keys[k] !== undefined) this.keys[k] = 0;
+        });
+    }
 
-        class Fighter {
-            constructor(x, y, charKey, isP1) {
-                this.x = x;
-                this.y = y;
-                this.width = 50;
-                this.height = 100;
-                this.isP1 = isP1;
-                this.facing = isP1 ? 1 : -1;
-                
-                // Atributos de Combate
-                this.hp = 100;
-                this.velocity = { x: 0, y: 0 };
-                this.speed = 5;
-                this.jumpPower = -14;
-                
-                // Estados
-                this.isJumping = false;
-                this.isAttacking = false;
-                this.attackCooldown = 0;
-                
-                this.loadCharacter(charKey);
+    // Checa se uma sequência ocorreu nos últimos X milissegundos
+    checkMotion(sequenceStr, timeWindow = 400) {
+        const seq = sequenceStr.split(',');
+        let seqIdx = seq.length - 1;
+        let now = Date.now();
+        
+        for (let i = this.buffer.length - 1; i >= 0; i--) {
+            if (now - this.buffer[i].time > timeWindow) return false;
+            if (this.buffer[i].key === seq[seqIdx]) {
+                seqIdx--;
+                if (seqIdx < 0) {
+                    this.buffer = []; // Consome o input
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}
+const input = new InputManager();
+
+// --- SISTEMA DE COMBATE E FÍSICA ---
+class Fighter {
+    constructor(x, id, isP1) {
+        this.x = x; this.y = FLOOR - 100;
+        this.w = 50; this.h = 100;
+        this.id = id; this.isP1 = isP1;
+        this.facing = isP1 ? 1 : -1;
+        
+        // Atributos de Status
+        this.hp = 100;
+        this.guard = 100; // Guard Meter
+        this.standActive = false;
+        
+        // Máquina de Estados (State Machine)
+        this.state = 'IDLE'; // IDLE, WALK, JUMP, ATTACK, BLOCK, PARRY, HURT, STAGGER
+        this.stateTimer = 0;
+        
+        // Física
+        this.vx = 0; this.vy = 0;
+        this.speed = 4;
+        
+        // Dados do Ataque Atual
+        this.currentMove = null;
+        this.moveKey = null;
+        this.hasHit = false; // Garante que o golpe bata 1x (exceto multi-hits)
+        this.hitsLanded = 0;
+        
+        // Cooldowns
+        this.cds = { 'ORA_ORA': 0, 'MACH_ORA': 0, 'STAR_FINGER': 0, 'TIME_STOP': 0 };
+        
+        this.initUI();
+    }
+
+    initUI() {
+        const hud = document.getElementById(`${this.id}-cds`);
+        hud.innerHTML = '';
+        Object.keys(this.cds).forEach(skill => {
+            hud.innerHTML += `
+                <div class="cd-box" id="${this.id}-cd-${skill}">
+                    <span class="cd-text">${MOVEDB[skill].name.substring(0,3).toUpperCase()}</span>
+                    <div class="cd-overlay" id="${this.id}-overlay-${skill}"></div>
+                </div>`;
+        });
+    }
+
+    changeState(newState, moveKey = null) {
+        this.state = newState;
+        this.stateTimer = 0;
+        if(newState === 'ATTACK' && moveKey) {
+            this.currentMove = MOVEDB[moveKey];
+            this.moveKey = moveKey;
+            this.hasHit = false;
+            this.hitsLanded = 0;
+            if(this.currentMove.cooldown) this.cds[moveKey] = this.currentMove.cooldown;
+            
+            // Lógica de Supes / Avanços (Propel)
+            if(this.currentMove.propel) this.vx = this.currentMove.propel * this.facing;
+            if(this.currentMove.type === 'super' && moveKey === 'TIME_STOP') activateTimeStop(this);
+            createVFX(this.currentMove.name, this.x + (20*this.facing), this.y - 20, this.currentMove.color || '#fff');
+        } else {
+            this.currentMove = null;
+        }
+    }
+
+    updateCooldowns() {
+        Object.keys(this.cds).forEach(skill => {
+            if (this.cds[skill] > 0) {
+                this.cds[skill]--;
+                const pct = (this.cds[skill] / MOVEDB[skill].cooldown) * 100;
+                document.getElementById(`${this.id}-overlay-${skill}`).style.height = `${pct}%`;
+            }
+        });
+        
+        // Regen de Guard
+        if(this.state !== 'BLOCK' && this.guard < 100) {
+            this.guard += 0.1;
+            document.getElementById(`${this.id}-guard`).style.width = `${this.guard}%`;
+        }
+    }
+
+    takeDamage(damage, hitstun, pushback) {
+        this.hp -= damage;
+        if(this.hp < 0) this.hp = 0;
+        document.getElementById(`${this.id}-hp`).style.width = `${this.hp}%`;
+        this.changeState('HURT');
+        this.stateTimer = -hitstun; // Hack para usar timer negativo como stun
+        this.x -= pushback * this.facing;
+        createParticle(this.x + this.w/2, this.y + 30, '#ff0000');
+    }
+
+    takeBlockDamage(damage, blockstun, pushback) {
+        this.guard -= damage * 2; // Dano no escudo
+        this.hp -= damage * 0.1; // Chip damage (10%)
+        document.getElementById(`${this.id}-guard`).style.width = `${Math.max(0, this.guard)}%`;
+        document.getElementById(`${this.id}-hp`).style.width = `${this.hp}%`;
+        
+        if (this.guard <= 0) {
+            this.changeState('STAGGER');
+            this.stateTimer = -60; // 1 segundo quebrado
+            this.guard = 100;
+            createVFX("GUARD BREAK!", this.x, this.y, "#ff0000");
+        } else {
+            this.state = 'BLOCK';
+            this.stateTimer = -blockstun;
+            this.x -= pushback * this.facing;
+            createParticle(this.x + (this.facing===1?this.w:0), this.y + 30, '#03a9f4');
+        }
+    }
+
+    successfulParry() {
+        this.changeState('PARRY');
+        this.stateTimer = -15; // 15 frames de vantagem
+        this.guard += 10;
+        createVFX("PARRY!", this.x, this.y, "#ffffff", true);
+    }
+
+    update(enemy) {
+        if(globalTimeStop > 0 && timeStopOwner !== this) return; // Congelado no Za Warudo
+
+        this.updateCooldowns();
+
+        // Física básica
+        this.vy += 0.8; // Gravidade
+        this.y += this.vy;
+        if (this.y + this.h > FLOOR) {
+            this.y = FLOOR - this.h;
+            this.vy = 0;
+            if (this.state === 'JUMP') this.changeState('IDLE');
+        }
+
+        // Atrito
+        if (this.state !== 'ATTACK') this.vx *= 0.8;
+        this.x += this.vx;
+
+        // Limites da tela
+        if (this.x < 0) this.x = 0;
+        if (this.x > canvas.width - this.w) this.x = canvas.width - this.w;
+
+        // Virar para o inimigo (se não estiver atacando)
+        if (this.state !== 'ATTACK' && this.state !== 'HURT') {
+            this.facing = (enemy.x > this.x) ? 1 : -1;
+        }
+
+        // Lógica de Máquina de Estados
+        if (this.state === 'HURT' || this.state === 'BLOCK' || this.state === 'STAGGER' || this.state === 'PARRY') {
+            this.stateTimer++;
+            if (this.stateTimer >= 0) this.changeState('IDLE');
+            return; // Impede outras ações
+        }
+
+        if (this.state === 'ATTACK') {
+            this.stateTimer++;
+            const move = this.currentMove;
+            
+            if (move.type === 'util') {
+                if (this.stateTimer > move.recovery) this.changeState('IDLE');
+                return;
             }
 
-            loadCharacter(charKey) {
-                const data = CHARACTERS[charKey];
-                this.name = data.name;
-                this.color = data.color;
-                this.standColor = data.standColor;
-                this.shout = data.shout;
-                this.specialSound = data.specialSound;
-            }
-
-            update() {
-                // Se o tempo estiver parado por outro jogador, congela
-                if (timeStopOwner !== null && timeStopOwner !== this) return;
-
-                // Físicas
-                this.velocity.y += GRAVITY;
-                this.x += this.velocity.x;
-                this.y += this.velocity.y;
-
-                // Colisão com o chão
-                if (this.y + this.height >= FLOOR) {
-                    this.y = FLOOR - this.height;
-                    this.velocity.y = 0;
-                    this.isJumping = false;
+            // Frame Data: Active frames (Hitbox rolando)
+            if (this.stateTimer >= move.startup && this.stateTimer < move.startup + move.active) {
+                
+                // Multi-hit logic (ex: Ora Ora bate a cada 5 frames)
+                let canHit = !this.hasHit;
+                if (move.hits && this.stateTimer % 5 === 0 && this.hitsLanded < move.hits) {
+                    canHit = true;
                 }
 
-                // Limites da tela
-                if (this.x < 0) this.x = 0;
-                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
-
-                // Cooldown do ataque
-                if (this.attackCooldown > 0) this.attackCooldown--;
-                if (this.attackCooldown === 0) this.isAttacking = false;
-            }
-
-            draw() {
-                // Efeito do Stand durante ataque
-                if (this.isAttacking) {
-                    ctx.fillStyle = this.standColor;
-                    // Stand aparece levemente à frente
-                    ctx.fillRect(this.x + (40 * this.facing), this.y - 10, this.width + 20, this.height + 10);
-                }
-
-                // Desenhar lutador
-                ctx.fillStyle = this.color;
-                ctx.fillRect(this.x, this.y, this.width, this.height);
-
-                // Olhos (para mostrar direção)
-                ctx.fillStyle = "#fff";
-                ctx.fillRect(this.x + (this.facing === 1 ? 30 : 10), this.y + 10, 10, 10);
-                
-                // Hitbox de ataque
-                if (this.isAttacking) {
-                    ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
-                    ctx.fillRect(this.x + (this.width * this.facing), this.y + 20, 60, 40);
-                }
-            }
-
-            attack(enemy) {
-                if (this.attackCooldown === 0) {
-                    this.isAttacking = true;
-                    this.attackCooldown = 20;
-
-                    // Criar texto do golpe
-                    vfxTexts.push({
-                        text: this.shout,
-                        x: this.x + (80 * this.facing),
-                        y: this.y + 20 + Math.random() * 40,
-                        life: 30
-                    });
-
-                    // Checar colisão (Simples)
-                    let attackBox = {
-                        x: this.facing === 1 ? this.x + this.width : this.x - 60,
-                        y: this.y + 20,
-                        w: 60, h: 40
-                    };
-
-                    if (attackBox.x < enemy.x + enemy.width &&
-                        attackBox.x + attackBox.w > enemy.x &&
-                        attackBox.y < enemy.y + enemy.height &&
-                        attackBox.y + attackBox.h > enemy.y) {
+                if (canHit) {
+                    // Detecção de Colisão de Hitbox
+                    let hx = this.facing === 1 ? this.x + move.hitbox.x : this.x + this.w - move.hitbox.x - move.hitbox.w;
+                    let hy = this.y + move.hitbox.y;
+                    
+                    if (hx < enemy.x + enemy.w && hx + move.hitbox.w > enemy.x &&
+                        hy < enemy.y + enemy.h && hy + move.hitbox.h > enemy.y) {
                         
-                        // Sofreu Dano
-                        enemy.hp -= 5;
-                        if (enemy.hp < 0) enemy.hp = 0;
-                        updateHealthBars();
+                        this.hasHit = true;
+                        this.hitsLanded++;
+
+                        // Lógica de Dano / Defesa
+                        let isEnemyBlocking = (enemy.state === 'BLOCK' || enemy.state === 'WALK') && 
+                                              ((enemy.facing === 1 && enemy.vx < 0) || (enemy.facing === -1 && enemy.vx > 0) || input.keys[enemy.facing===1?'a':'d']);
                         
-                        // Empurrãozinho
-                        enemy.x += 10 * this.facing;
+                        if (enemy.id === 'p2') isEnemyBlocking = enemy.state === 'BLOCK'; // AI logic
+                        
+                        if (isEnemyBlocking) {
+                            // PARRY: Janela de 8 frames iniciais de block
+                            if (enemy.stateTimer > -8 && enemy.stateTimer <= 0) {
+                                enemy.successfulParry();
+                                this.changeState('HURT'); // Punish state no atacante
+                                this.stateTimer = -20;
+                            } else {
+                                enemy.takeBlockDamage(move.damage, move.blockstun, move.pushback);
+                            }
+                        } else {
+                            enemy.takeDamage(move.damage, move.hitstun, move.pushback);
+                        }
                     }
                 }
             }
-
-            special() {
-                // Time Stop
-                if (timeStopOwner === null) {
-                    timeStopOwner = this;
-                    timeStopTimer = 180; // 3 segundos (a 60 fps)
-                    
-                    vfxTexts.push({
-                        text: this.specialSound,
-                        x: canvas.width / 2 - 150,
-                        y: canvas.height / 2,
-                        life: 60,
-                        isGiant: true
-                    });
-                }
+            
+            // Fim do golpe (Recovery)
+            if (this.stateTimer >= move.startup + move.active + move.recovery) {
+                this.changeState('IDLE');
             }
         }
+    }
 
-        let player1, player2;
+    draw() {
+        // Efeito Za Warudo inverte as cores de quem não o ativou
+        if (globalTimeStop > 0 && timeStopOwner !== this) ctx.filter = 'grayscale(100%)';
+        else ctx.filter = 'none';
 
-        // Controles Pressionados
-        const keys = {
-            a: false, d: false, w: false, 
-            ArrowLeft: false, ArrowRight: false, ArrowUp: false
-        };
+        // Sombra
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(this.x, FLOOR, this.w, 5);
 
-        window.addEventListener('keydown', (e) => {
-            if (gameState !== 'PLAYING') return;
+        // Stand Visuals
+        if (this.standActive || (this.state === 'ATTACK' && this.currentMove && this.currentMove.type !== 'util')) {
+            ctx.fillStyle = this.isP1 ? 'rgba(128, 0, 128, 0.4)' : 'rgba(255, 215, 0, 0.4)'; // Star Plat / The World
+            let standX = this.x + (this.state === 'ATTACK' ? 30 * this.facing : 15 * this.facing);
+            ctx.fillRect(standX, this.y - 10, this.w, this.h);
+        }
 
-            // Movimento P1
-            if (e.key === 'a') keys.a = true;
-            if (e.key === 'd') keys.d = true;
-            if (e.key === 'w' && !player1.isJumping) { player1.velocity.y = player1.jumpPower; player1.isJumping = true; }
-            
-            // Movimento P2
-            if (e.key === 'ArrowLeft') keys.ArrowLeft = true;
-            if (e.key === 'ArrowRight') keys.ArrowRight = true;
-            if (e.key === 'ArrowUp' && !player2.isJumping) { player2.velocity.y = player2.jumpPower; player2.isJumping = true; }
+        // Personagem
+        ctx.fillStyle = (this.state === 'HURT' || this.state === 'STAGGER') ? '#fff' : (this.isP1 ? '#1c2a43' : '#e2c222');
+        if (this.state === 'BLOCK') ctx.fillStyle = '#555'; // Cor de block
+        if (this.state === 'PARRY') ctx.fillStyle = '#03a9f4'; 
+        
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        
+        // Olho
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(this.x + (this.facing===1?35:5), this.y + 10, 10, 10);
 
-            // Ações P1
-            if (e.key === 'f') player1.attack(player2);
-            if (e.key === 'g') player1.special();
-            
-            // Mecânica de Troca (Tag System) P1
-            if (e.key === 't') {
-                const newChar = player1.name === "JOTARO" ? "polnareff" : "jotaro";
-                player1.loadCharacter(newChar);
-                p1NameTag.innerText = player1.name;
-                vfxTexts.push({ text: "CHANGE!", x: player1.x, y: player1.y - 20, life: 40 });
-            }
+        // Desenhar Hitbox no modo Active (Apenas Visual)
+        if (this.state === 'ATTACK' && this.currentMove && this.stateTimer >= this.currentMove.startup && this.stateTimer < this.currentMove.startup + this.currentMove.active) {
+            ctx.fillStyle = 'rgba(255,0,0,0.5)';
+            let hx = this.facing === 1 ? this.x + this.currentMove.hitbox.x : this.x + this.w - this.currentMove.hitbox.x - this.currentMove.hitbox.w;
+            let hy = this.y + this.currentMove.hitbox.y;
+            ctx.fillRect(hx, hy, this.currentMove.hitbox.w, this.currentMove.hitbox.h);
+        }
+    }
+}
 
-            // Ações P2
-            if (e.key === 'l') player2.attack(player1);
-            if (e.key === 'k') player2.special();
+// --- VARIÁVEIS GLOBAIS ---
+let p1, p2;
+let particles = [];
+let vfxList = [];
+let globalTimeStop = 0;
+let timeStopOwner = null;
+
+// --- EFEITOS VISUAIS ---
+function createVFX(text, x, y, color, scaleUp = false) {
+    vfxList.push({ text, x, y, color, life: 40, scaleUp, size: 12 });
+}
+function createParticle(x, y, color) {
+    for(let i=0; i<5; i++) {
+        particles.push({
+            x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
+            life: 20, color
         });
+    }
+}
+function drawVFX() {
+    // Particles
+    particles.forEach((p, i) => {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 4, 4);
+        p.x += p.vx; p.y += p.vy; p.life--;
+        if(p.life <= 0) particles.splice(i, 1);
+    });
+    // Text VFX
+    vfxList.forEach((v, i) => {
+        ctx.fillStyle = v.color;
+        ctx.font = `${v.size}px 'Press Start 2P'`;
+        ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+        ctx.strokeText(v.text, v.x, v.y);
+        ctx.fillText(v.text, v.x, v.y);
+        v.y -= 1; v.life--;
+        if(v.scaleUp) v.size += 0.5;
+        if(v.life <= 0) vfxList.splice(i, 1);
+    });
+}
 
-        window.addEventListener('keyup', (e) => {
-            if (e.key === 'a') keys.a = false;
-            if (e.key === 'd') keys.d = false;
-            if (e.key === 'ArrowLeft') keys.ArrowLeft = false;
-            if (e.key === 'ArrowRight') keys.ArrowRight = false;
-        });
+// --- SPECIAL LOGIC ---
+function activateTimeStop(owner) {
+    globalTimeStop = 180; // 3 sec at 60fps
+    timeStopOwner = owner;
+    document.getElementById('game-wrapper').style.filter = 'invert(1)';
+    setTimeout(() => { document.getElementById('game-wrapper').style.filter = 'none'; }, 3000);
+}
 
-        function updateHealthBars() {
-            p1HpBar.style.width = player1.hp + '%';
-            p2HpBar.style.width = player2.hp + '%';
+// --- AI LOGIC (Inteligência do Inimigo) ---
+function updateAI(bot, player, diff) {
+    if (bot.state !== 'IDLE' && bot.state !== 'WALK') return; // Só decide se estiver livre
 
-            if (player1.hp <= 0 || player2.hp <= 0) {
-                endGame(player1.hp <= 0 ? "P2 VENCEU!" : "P1 VENCEU!");
-            }
+    const dist = Math.abs(bot.x - player.x);
+    const pAttacking = player.state === 'ATTACK';
+    
+    // Níveis definem probabilidade (0.0 a 1.0)
+    const reactionChance = diff === 1 ? 0.2 : (diff === 2 ? 0.6 : 0.95);
+    
+    // 1. Defesa & Parry (Se o player atacar)
+    if (pAttacking && dist < 120 && Math.random() < reactionChance) {
+        if (diff === 3 && Math.random() < 0.4) {
+            // Tenta Parry (Solta a defesa e aperta rápido)
+            bot.changeState('BLOCK'); 
+            bot.stateTimer = -5; // Força uma janela fresca de parry
+            return;
+        } else {
+            bot.changeState('BLOCK');
+            return;
         }
+    }
 
-        function startGame() {
-            overlay.style.display = 'none';
-            ui.style.display = 'block';
-            
-            player1 = new Fighter(100, 100, "jotaro", true);
-            player2 = new Fighter(600, 100, "dio", false);
-            
-            p1HpBar.style.width = '100%';
-            p2HpBar.style.width = '100%';
-            p1NameTag.innerText = "JOTARO";
-            
-            timeStopOwner = null;
-            timeStopTimer = 0;
-            vfxTexts = [];
-            
-            gameState = 'PLAYING';
-            gameLoop();
+    // 2. Punir Recovery do Player
+    if (player.state === 'IDLE' && player.stateTimer > 0 /* está em recovery real */ && dist < 80) {
+        if (bot.cds['ORA_ORA'] === 0) { bot.changeState('ATTACK', 'ORA_ORA'); return; }
+        bot.changeState('ATTACK', 'MEDIUM'); return;
+    }
+
+    // 3. Controle de Distância e Ofensiva
+    if (dist > 150) {
+        // Longe: Anda ou usa Star Finger
+        if (bot.cds['STAR_FINGER'] === 0 && Math.random() < (reactionChance * 0.05)) {
+            bot.changeState('ATTACK', 'STAR_FINGER');
+        } else {
+            bot.vx = bot.speed * bot.facing;
+            bot.state = 'WALK';
         }
-
-        function endGame(message) {
-            gameState = 'GAMEOVER';
-            ui.style.display = 'none';
-            overlay.style.display = 'flex';
-            overlay.innerHTML = `
-                <h1 style="color: #ff0000; font-size: 50px;">K.O.</h1>
-                <h2>${message}</h2>
-                <button onclick="location.reload()">REVANCHE</button>
-            `;
-        }
-
-        function handleMovement() {
-            // P1 Movimentação
-            if (keys.a) { player1.velocity.x = -player1.speed; player1.facing = -1; }
-            else if (keys.d) { player1.velocity.x = player1.speed; player1.facing = 1; }
-            else { player1.velocity.x = 0; }
-
-            // P2 Movimentação
-            if (keys.ArrowLeft) { player2.velocity.x = -player2.speed; player2.facing = -1; }
-            else if (keys.ArrowRight) { player2.velocity.x = player2.speed; player2.facing = 1; }
-            else { player2.velocity.x = 0; }
-
-            // Sempre olhar um pro outro se não estiverem se movendo ativamente
-            if (!keys.a && !keys.d) {
-                player1.facing = player1.x < player2.x ? 1 : -1;
-            }
-            if (!keys.ArrowLeft && !keys.ArrowRight) {
-                player2.facing = player2.x < player1.x ? 1 : -1;
-            }
-        }
-
-        function drawBackground() {
-            // Se o tempo estiver parado, inverte as cores (Efeito ZA WARUDO)
-            if (timeStopTimer > 0) {
-                ctx.filter = 'invert(1) grayscale(100%)';
+    } else {
+        // Perto: Ataca
+        bot.vx = 0;
+        if (Math.random() < (reactionChance * 0.05)) { // Decide atacar
+            if (bot.cds['MACH_ORA'] === 0 && Math.random() < 0.5) bot.changeState('ATTACK', 'MACH_ORA');
+            else bot.changeState('ATTACK', Math.random() > 0.5 ? 'LIGHT' : 'HEAVY');
+        } else {
+            // Recuo tático (Difícil)
+            if (diff === 3 && Math.random() < 0.02) {
+                bot.vx = -bot.speed * bot.facing * 1.5;
+                bot.state = 'WALK';
             } else {
-                ctx.filter = 'none';
-            }
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Chão
-            ctx.fillStyle = "#333";
-            ctx.fillRect(0, FLOOR, canvas.width, canvas.height - FLOOR);
-
-            // Linha do chão arcade
-            ctx.strokeStyle = "#ff00ff";
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(0, FLOOR);
-            ctx.lineTo(canvas.width, FLOOR);
-            ctx.stroke();
-        }
-
-        function drawVFX() {
-            for (let i = vfxTexts.length - 1; i >= 0; i--) {
-                let vfx = vfxTexts[i];
-                ctx.fillStyle = "#ffea00";
-                ctx.font = vfx.isGiant ? "20px 'Press Start 2P'" : "10px 'Press Start 2P'";
-                
-                // Contorno preto
-                ctx.lineWidth = 3;
-                ctx.strokeStyle = "#000";
-                ctx.strokeText(vfx.text, vfx.x, vfx.y);
-                ctx.fillText(vfx.text, vfx.x, vfx.y);
-
-                vfx.y -= 1; // Sobe flutuando
-                vfx.life--;
-                if (vfx.life <= 0) vfxTexts.splice(i, 1);
+                bot.state = 'IDLE';
             }
         }
+    }
+    
+    // 4. Time Stop Check (Apelação)
+    if (bot.standActive && bot.cds['TIME_STOP'] === 0 && dist < 200 && diff > 1 && Math.random() < 0.01) {
+        bot.changeState('ATTACK', 'TIME_STOP');
+    }
+}
 
-        function gameLoop() {
-            if (gameState !== 'PLAYING') return;
 
-            // Atualiza Time Stop
-            if (timeStopTimer > 0) {
-                timeStopTimer--;
-                if (timeStopTimer <= 0) timeStopOwner = null;
-            }
+// --- MAIN LOOP ---
+function initGame() {
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('ui').classList.remove('hidden');
+    
+    p1 = new Fighter(100, 'p1', true);
+    p2 = new Fighter(600, 'p2', false);
+    
+    // Da stand pro bot no nivel dificil direto
+    if(aiDifficulty === 3) p2.standActive = true; 
 
-            handleMovement();
+    gameState = 'PLAYING';
+    requestAnimationFrame(gameLoop);
+}
 
-            player1.update();
-            player2.update();
+function handleP1Input() {
+    if (p1.state !== 'IDLE' && p1.state !== 'WALK' && p1.state !== 'JUMP') return;
+    
+    // Stand Toggle
+    if (input.keys.e) { p1.standActive = !p1.standActive; p1.changeState('ATTACK', 'STAND_TOGGLE'); input.keys.e = 0; return; }
 
-            drawBackground();
-            player1.draw();
-            player2.draw();
-            drawVFX();
+    // Buffer Specials Check
+    if (p1.standActive && p1.cds['TIME_STOP'] === 0 && input.checkMotion('s,s,e')) { p1.changeState('ATTACK', 'TIME_STOP'); return; }
+    if (p1.cds['STAR_FINGER'] === 0 && input.checkMotion('d,s,d,u', 500)) { p1.changeState('ATTACK', 'STAR_FINGER'); return; }
+    if (p1.cds['ORA_ORA'] === 0 && input.checkMotion('s,d,u')) { p1.changeState('ATTACK', 'ORA_ORA'); return; }
+    if (p1.cds['MACH_ORA'] === 0 && input.checkMotion('s,a,i')) { p1.changeState('ATTACK', 'MACH_ORA'); return; }
 
-            requestAnimationFrame(gameLoop);
-        }
-    </script>
+    // Normals
+    if (input.keys.u) { p1.changeState('ATTACK', 'LIGHT'); return; }
+    if (input.keys.i) { p1.changeState('ATTACK', 'MEDIUM'); return; }
+    if (input.keys.o) { p1.changeState('ATTACK', 'HEAVY'); return; }
+
+    // Movimento e Defesa Base
+    let isBlocking = (p1.facing === 1 && input.keys.a) || (p1.facing === -1 && input.keys.d);
+    
+    if (isBlocking) {
+        // O jogador está recuando. O block real ocorre quando a hitbox inimiga encostar (calculado no update)
+        p1.vx = -2 * p1.facing;
+        p1.state = 'WALK';
+    } else if (input.keys.d) {
+        p1.vx = p1.speed; p1.state = 'WALK';
+    } else if (input.keys.a) {
+        p1.vx = -p1.speed; p1.state = 'WALK';
+    } else {
+        p1.state = 'IDLE';
+    }
+
+    if (input.keys.w && p1.state !== 'JUMP') {
+        p1.vy = -12; p1.state = 'JUMP';
+    }
+}
+
+function drawBackground() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Linha de chão Arcade
+    ctx.strokeStyle = '#4a148c'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, FLOOR); ctx.lineTo(canvas.width, FLOOR); ctx.stroke();
+    
+    // Grid sutil no fundo
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+    for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, FLOOR); ctx.stroke(); }
+}
+
+function gameLoop() {
+    if (gameState !== 'PLAYING') return;
+
+    if (globalTimeStop > 0) globalTimeStop--;
+    if (globalTimeStop <= 0) timeStopOwner = null;
+
+    handleP1Input();
+    
+    if (globalTimeStop === 0 || timeStopOwner === p2) {
+        updateAI(p2, p1, aiDifficulty);
+    }
+
+    p1.update(p2);
+    p2.update(p1);
+
+    drawBackground();
+    p1.draw();
+    p2.draw();
+    drawVFX();
+
+    // Game Over check
+    if (p1.hp <= 0 || p2.hp <= 0) {
+        gameState = 'GAMEOVER';
+        createVFX("K.O.", canvas.width/2 - 50, canvas.height/2, "#ff0000", true);
+        setTimeout(() => location.reload(), 3000);
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+</script>
 </body>
 </html>
