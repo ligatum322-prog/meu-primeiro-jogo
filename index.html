@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Star Platinum Test</title>
+    <style>
+        body { margin: 0; background: #111; overflow: hidden; color: white; font-family: sans-serif; }
+        canvas { display: block; }
+        #status { position: absolute; top: 10px; left: 10px; font-size: 20px; }
+    </style>
+</head>
+<body>
+    <div id="status">Pressione 'T' para PARAR O TEMPO!</div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let timeStopped = false;
+        let player = { x: 100, y: 100, size: 30, color: "#00f" };
+        let enemies = [];
+
+        // Criar inimigos aleatórios
+        for(let i=0; i<10; i++) {
+            enemies.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, vx: 2, vy: 2 });
+        }
+
+        window.addEventListener("keydown", (e) => {
+            if (e.key.toLowerCase() === "t") {
+                timeStopped = !timeStopped;
+                document.getElementById("status").innerText = timeStopped ? "ZA WARUDO! (Tempo Parado)" : "O tempo voltou a correr...";
+                document.body.style.filter = timeStopped ? "invert(100%)" : "none"; // Efeito visual de negativo
+            }
+        });
+
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Desenhar Jogador (Sempre se move)
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+
+            // Seguir o mouse
+            window.onmousemove = (e) => { player.x = e.clientX; player.y = e.clientY; };
+
+            // Desenhar Inimigos
+            enemies.forEach(en => {
+                if (!timeStopped) { // Só movem se o tempo não estiver parado
+                    en.x += en.vx; en.y += en.vy;
+                    if(en.x > canvas.width || en.x < 0) en.vx *= -1;
+                    if(en.y > canvas.height || en.y < 0) en.vy *= -1;
+                }
+                ctx.fillStyle = "#f00";
+                ctx.beginPath();
+                ctx.arc(en.x, en.y, 15, 0, Math.PI*2);
+                ctx.fill();
+            });
+
+            requestAnimationFrame(update);
+        }
+        update();
+    </script>
+</body>
+</html>
