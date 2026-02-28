@@ -105,12 +105,12 @@
 
         <div class="controls-info">
             <span class="highlight">MOVIMENTO:</span> W, A, S, D<br>
-            <span class="highlight">DEFESA:</span> Segurar para trás (A ou D dependendo do lado)<br>
-            <span class="highlight">STAND ON/OFF:</span> E<br>
-            <span class="highlight">NORMAL L/M/H:</span> U, I, O<br>
-            <span class="highlight">ORA-ORA:</span> S, D, U (QCF+L) | <span class="highlight">MACH-ORA:</span> S, A, I (QCB+M)<br>
-            <span class="highlight">STAR FINGER:</span> D, S, D, U (SRK+L)<br>
-            <span class="highlight">TIME STOP (Super):</span> S, S, E (Requer Stand ON)
+            <span class="highlight">DEFESA:</span> Segurar para trás (A ou D)<br>
+            <span class="highlight">STAND ON/OFF:</span> Q<br>
+            <span class="highlight">GOLPES:</span> Jab (Mouse Esq.) | Hook (Mouse Meio) | Kick (Mouse Dir.)<br>
+            <span class="highlight">ORA-ORA:</span> E | <span class="highlight">MACH-ORA:</span> R<br>
+            <span class="highlight">STAR FINGER:</span> T<br>
+            <span class="highlight">TIME STOP:</span> G (Requer Stand ON)
         </div>
     </div>
 
@@ -118,16 +118,11 @@
 </div>
 
 <script>
-/**
- * JOJO'S BIZARRE ADVENTURE - ADVANCED ENGINE
- * Features: Frame Data, Hitboxes, Input Buffer (Motions), Guard, Parry, Cooldowns, AI.
- */
-
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const FLOOR = 400;
-let gameState = 'START'; // START, PLAYING, GAMEOVER
-let aiDifficulty = 2; // 1: Easy, 2: Med, 3: Hard
+let gameState = 'START'; 
+let aiDifficulty = 2; 
 
 function setDiff(lvl) {
     aiDifficulty = lvl;
@@ -135,21 +130,12 @@ function setDiff(lvl) {
     event.target.classList.add('active');
 }
 
-// --- BANCO DE DADOS DE MOVIMENTOS (FRAME DATA) ---
-// startup: frames até o golpe bater
-// active: frames que o golpe dá dano
-// recovery: frames vulneráveis após o golpe
-// damage: dano base
-// blockstun/hitstun: frames que o inimigo fica travado
-// pushback: força que empurra o inimigo
 const MOVEDB = {
-    // Normais
     'STAND_TOGGLE': { name: 'Stand', startup: 2, active: 0, recovery: 10, type: 'util' },
     'LIGHT':  { name: 'Jab', startup: 4, active: 3, recovery: 8, damage: 3, hitbox: {w:40, h:20, x:30, y:20}, hitstun: 12, blockstun: 10, pushback: 2 },
     'MEDIUM': { name: 'Hook', startup: 7, active: 4, recovery: 12, damage: 6, hitbox: {w:50, h:25, x:30, y:20}, hitstun: 16, blockstun: 14, pushback: 4 },
     'HEAVY':  { name: 'Kick', startup: 10, active: 5, recovery: 18, damage: 10, hitbox: {w:60, h:30, x:30, y:60}, hitstun: 20, blockstun: 18, pushback: 8 },
     
-    // Especiais (Movelist Jotaro)
     'ORA_ORA': { 
         name: 'Ora-Ora', input: 'E', startup: 8, active: 40, recovery: 20, damage: 2, hits: 8, 
         hitbox: {w: 70, h: 60, x: 40, y: 10}, hitstun: 10, blockstun: 10, pushback: 1, cooldown: 180, color: '#aa00ff'
@@ -168,49 +154,40 @@ const MOVEDB = {
     }
 };
 
-// --- INPUT BUFFER SYSTEM ---
-// Registra os últimos inputs para detectar QCF (Meia-lua) e SRK
 class InputManager {
     constructor() {
         this.buffer = [];
-        this.keys = { w:0, a:0, s:0, d:0, u:0, i:0, o:0, e:0 };
+        this.keys = { w:0, a:0, s:0, d:0, q:0, e:0, r:0, t:0, g:0, mouse0:0, mouse1:0, mouse2:0 };
         
         window.addEventListener('keydown', e => {
             const k = e.key.toLowerCase();
             if(this.keys[k] !== undefined && this.keys[k] === 0) {
                 this.keys[k] = 1;
-                this.buffer.push({ key: k, time: Date.now() });
-                if(this.buffer.length > 15) this.buffer.shift();
             }
         });
         window.addEventListener('keyup', e => {
             const k = e.key.toLowerCase();
             if(this.keys[k] !== undefined) this.keys[k] = 0;
         });
-    }
 
-    // Checa se uma sequência ocorreu nos últimos X milissegundos
-    checkMotion(sequenceStr, timeWindow = 400) {
-        const seq = sequenceStr.split(',');
-        let seqIdx = seq.length - 1;
-        let now = Date.now();
-        
-        for (let i = this.buffer.length - 1; i >= 0; i--) {
-            if (now - this.buffer[i].time > timeWindow) return false;
-            if (this.buffer[i].key === seq[seqIdx]) {
-                seqIdx--;
-                if (seqIdx < 0) {
-                    this.buffer = []; // Consome o input
-                    return true;
-                }
+        // Eventos do Mouse
+        window.addEventListener('mousedown', e => {
+            const k = 'mouse' + e.button; // 0: esquerdo, 1: meio, 2: direito
+            if(this.keys[k] !== undefined && this.keys[k] === 0) {
+                this.keys[k] = 1;
             }
-        }
-        return false;
+        });
+        window.addEventListener('mouseup', e => {
+            const k = 'mouse' + e.button;
+            if(this.keys[k] !== undefined) this.keys[k] = 0;
+        });
+
+        // Evita abrir o menu de clique-direito do navegador
+        window.addEventListener('contextmenu', e => e.preventDefault());
     }
 }
 const input = new InputManager();
 
-// --- SISTEMA DE COMBATE E FÍSICA ---
 class Fighter {
     constructor(x, id, isP1) {
         this.x = x; this.y = FLOOR - 100;
@@ -218,26 +195,21 @@ class Fighter {
         this.id = id; this.isP1 = isP1;
         this.facing = isP1 ? 1 : -1;
         
-        // Atributos de Status
         this.hp = 100;
-        this.guard = 100; // Guard Meter
+        this.guard = 100; 
         this.standActive = false;
         
-        // Máquina de Estados (State Machine)
-        this.state = 'IDLE'; // IDLE, WALK, JUMP, ATTACK, BLOCK, PARRY, HURT, STAGGER
+        this.state = 'IDLE'; 
         this.stateTimer = 0;
         
-        // Física
         this.vx = 0; this.vy = 0;
         this.speed = 4;
         
-        // Dados do Ataque Atual
         this.currentMove = null;
         this.moveKey = null;
-        this.hasHit = false; // Garante que o golpe bata 1x (exceto multi-hits)
+        this.hasHit = false; 
         this.hitsLanded = 0;
         
-        // Cooldowns
         this.cds = { 'ORA_ORA': 0, 'MACH_ORA': 0, 'STAR_FINGER': 0, 'TIME_STOP': 0 };
         
         this.initUI();
@@ -265,7 +237,6 @@ class Fighter {
             this.hitsLanded = 0;
             if(this.currentMove.cooldown) this.cds[moveKey] = this.currentMove.cooldown;
             
-            // Lógica de Supes / Avanços (Propel)
             if(this.currentMove.propel) this.vx = this.currentMove.propel * this.facing;
             if(this.currentMove.type === 'super' && moveKey === 'TIME_STOP') activateTimeStop(this);
             createVFX(this.currentMove.name, this.x + (20*this.facing), this.y - 20, this.currentMove.color || '#fff');
@@ -283,7 +254,6 @@ class Fighter {
             }
         });
         
-        // Regen de Guard
         if(this.state !== 'BLOCK' && this.guard < 100) {
             this.guard += 0.1;
             document.getElementById(`${this.id}-guard`).style.width = `${this.guard}%`;
@@ -295,20 +265,20 @@ class Fighter {
         if(this.hp < 0) this.hp = 0;
         document.getElementById(`${this.id}-hp`).style.width = `${this.hp}%`;
         this.changeState('HURT');
-        this.stateTimer = -hitstun; // Hack para usar timer negativo como stun
+        this.stateTimer = -hitstun; 
         this.x -= pushback * this.facing;
         createParticle(this.x + this.w/2, this.y + 30, '#ff0000');
     }
 
     takeBlockDamage(damage, blockstun, pushback) {
-        this.guard -= damage * 2; // Dano no escudo
-        this.hp -= damage * 0.1; // Chip damage (10%)
+        this.guard -= damage * 2; 
+        this.hp -= damage * 0.1; 
         document.getElementById(`${this.id}-guard`).style.width = `${Math.max(0, this.guard)}%`;
         document.getElementById(`${this.id}-hp`).style.width = `${this.hp}%`;
         
         if (this.guard <= 0) {
             this.changeState('STAGGER');
-            this.stateTimer = -60; // 1 segundo quebrado
+            this.stateTimer = -60; 
             this.guard = 100;
             createVFX("GUARD BREAK!", this.x, this.y, "#ff0000");
         } else {
@@ -321,18 +291,17 @@ class Fighter {
 
     successfulParry() {
         this.changeState('PARRY');
-        this.stateTimer = -15; // 15 frames de vantagem
+        this.stateTimer = -15; 
         this.guard += 10;
         createVFX("PARRY!", this.x, this.y, "#ffffff", true);
     }
 
     update(enemy) {
-        if(globalTimeStop > 0 && timeStopOwner !== this) return; // Congelado no Za Warudo
+        if(globalTimeStop > 0 && timeStopOwner !== this) return; 
 
         this.updateCooldowns();
 
-        // Física básica
-        this.vy += 0.8; // Gravidade
+        this.vy += 0.8; 
         this.y += this.vy;
         if (this.y + this.h > FLOOR) {
             this.y = FLOOR - this.h;
@@ -340,24 +309,20 @@ class Fighter {
             if (this.state === 'JUMP') this.changeState('IDLE');
         }
 
-        // Atrito
         if (this.state !== 'ATTACK') this.vx *= 0.8;
         this.x += this.vx;
 
-        // Limites da tela
         if (this.x < 0) this.x = 0;
         if (this.x > canvas.width - this.w) this.x = canvas.width - this.w;
 
-        // Virar para o inimigo (se não estiver atacando)
         if (this.state !== 'ATTACK' && this.state !== 'HURT') {
             this.facing = (enemy.x > this.x) ? 1 : -1;
         }
 
-        // Lógica de Máquina de Estados
         if (this.state === 'HURT' || this.state === 'BLOCK' || this.state === 'STAGGER' || this.state === 'PARRY') {
             this.stateTimer++;
             if (this.stateTimer >= 0) this.changeState('IDLE');
-            return; // Impede outras ações
+            return; 
         }
 
         if (this.state === 'ATTACK') {
@@ -369,17 +334,14 @@ class Fighter {
                 return;
             }
 
-            // Frame Data: Active frames (Hitbox rolando)
             if (this.stateTimer >= move.startup && this.stateTimer < move.startup + move.active) {
                 
-                // Multi-hit logic (ex: Ora Ora bate a cada 5 frames)
                 let canHit = !this.hasHit;
                 if (move.hits && this.stateTimer % 5 === 0 && this.hitsLanded < move.hits) {
                     canHit = true;
                 }
 
                 if (canHit) {
-                    // Detecção de Colisão de Hitbox
                     let hx = this.facing === 1 ? this.x + move.hitbox.x : this.x + this.w - move.hitbox.x - move.hitbox.w;
                     let hy = this.y + move.hitbox.y;
                     
@@ -389,17 +351,15 @@ class Fighter {
                         this.hasHit = true;
                         this.hitsLanded++;
 
-                        // Lógica de Dano / Defesa
                         let isEnemyBlocking = (enemy.state === 'BLOCK' || enemy.state === 'WALK') && 
                                               ((enemy.facing === 1 && enemy.vx < 0) || (enemy.facing === -1 && enemy.vx > 0) || input.keys[enemy.facing===1?'a':'d']);
                         
-                        if (enemy.id === 'p2') isEnemyBlocking = enemy.state === 'BLOCK'; // AI logic
+                        if (enemy.id === 'p2') isEnemyBlocking = enemy.state === 'BLOCK'; 
                         
                         if (isEnemyBlocking) {
-                            // PARRY: Janela de 8 frames iniciais de block
                             if (enemy.stateTimer > -8 && enemy.stateTimer <= 0) {
                                 enemy.successfulParry();
-                                this.changeState('HURT'); // Punish state no atacante
+                                this.changeState('HURT'); 
                                 this.stateTimer = -20;
                             } else {
                                 enemy.takeBlockDamage(move.damage, move.blockstun, move.pushback);
@@ -411,7 +371,6 @@ class Fighter {
                 }
             }
             
-            // Fim do golpe (Recovery)
             if (this.stateTimer >= move.startup + move.active + move.recovery) {
                 this.changeState('IDLE');
             }
@@ -419,33 +378,27 @@ class Fighter {
     }
 
     draw() {
-        // Efeito Za Warudo inverte as cores de quem não o ativou
         if (globalTimeStop > 0 && timeStopOwner !== this) ctx.filter = 'grayscale(100%)';
         else ctx.filter = 'none';
 
-        // Sombra
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(this.x, FLOOR, this.w, 5);
 
-        // Stand Visuals
         if (this.standActive || (this.state === 'ATTACK' && this.currentMove && this.currentMove.type !== 'util')) {
-            ctx.fillStyle = this.isP1 ? 'rgba(128, 0, 128, 0.4)' : 'rgba(255, 215, 0, 0.4)'; // Star Plat / The World
+            ctx.fillStyle = this.isP1 ? 'rgba(128, 0, 128, 0.4)' : 'rgba(255, 215, 0, 0.4)'; 
             let standX = this.x + (this.state === 'ATTACK' ? 30 * this.facing : 15 * this.facing);
             ctx.fillRect(standX, this.y - 10, this.w, this.h);
         }
 
-        // Personagem
         ctx.fillStyle = (this.state === 'HURT' || this.state === 'STAGGER') ? '#fff' : (this.isP1 ? '#1c2a43' : '#e2c222');
-        if (this.state === 'BLOCK') ctx.fillStyle = '#555'; // Cor de block
+        if (this.state === 'BLOCK') ctx.fillStyle = '#555'; 
         if (this.state === 'PARRY') ctx.fillStyle = '#03a9f4'; 
         
         ctx.fillRect(this.x, this.y, this.w, this.h);
         
-        // Olho
         ctx.fillStyle = '#fff';
         ctx.fillRect(this.x + (this.facing===1?35:5), this.y + 10, 10, 10);
 
-        // Desenhar Hitbox no modo Active (Apenas Visual)
         if (this.state === 'ATTACK' && this.currentMove && this.stateTimer >= this.currentMove.startup && this.stateTimer < this.currentMove.startup + this.currentMove.active) {
             ctx.fillStyle = 'rgba(255,0,0,0.5)';
             let hx = this.facing === 1 ? this.x + this.currentMove.hitbox.x : this.x + this.w - this.currentMove.hitbox.x - this.currentMove.hitbox.w;
@@ -455,14 +408,12 @@ class Fighter {
     }
 }
 
-// --- VARIÁVEIS GLOBAIS ---
 let p1, p2;
 let particles = [];
 let vfxList = [];
 let globalTimeStop = 0;
 let timeStopOwner = null;
 
-// --- EFEITOS VISUAIS ---
 function createVFX(text, x, y, color, scaleUp = false) {
     vfxList.push({ text, x, y, color, life: 40, scaleUp, size: 12 });
 }
@@ -475,14 +426,12 @@ function createParticle(x, y, color) {
     }
 }
 function drawVFX() {
-    // Particles
     particles.forEach((p, i) => {
         ctx.fillStyle = p.color;
         ctx.fillRect(p.x, p.y, 4, 4);
         p.x += p.vx; p.y += p.vy; p.life--;
         if(p.life <= 0) particles.splice(i, 1);
     });
-    // Text VFX
     vfxList.forEach((v, i) => {
         ctx.fillStyle = v.color;
         ctx.font = `${v.size}px 'Press Start 2P'`;
@@ -495,30 +444,25 @@ function drawVFX() {
     });
 }
 
-// --- SPECIAL LOGIC ---
 function activateTimeStop(owner) {
-    globalTimeStop = 180; // 3 sec at 60fps
+    globalTimeStop = 180; 
     timeStopOwner = owner;
     document.getElementById('game-wrapper').style.filter = 'invert(1)';
     setTimeout(() => { document.getElementById('game-wrapper').style.filter = 'none'; }, 3000);
 }
 
-// --- AI LOGIC (Inteligência do Inimigo) ---
 function updateAI(bot, player, diff) {
-    if (bot.state !== 'IDLE' && bot.state !== 'WALK') return; // Só decide se estiver livre
+    if (bot.state !== 'IDLE' && bot.state !== 'WALK') return; 
 
     const dist = Math.abs(bot.x - player.x);
     const pAttacking = player.state === 'ATTACK';
     
-    // Níveis definem probabilidade (0.0 a 1.0)
     const reactionChance = diff === 1 ? 0.2 : (diff === 2 ? 0.6 : 0.95);
     
-    // 1. Defesa & Parry (Se o player atacar)
     if (pAttacking && dist < 120 && Math.random() < reactionChance) {
         if (diff === 3 && Math.random() < 0.4) {
-            // Tenta Parry (Solta a defesa e aperta rápido)
             bot.changeState('BLOCK'); 
-            bot.stateTimer = -5; // Força uma janela fresca de parry
+            bot.stateTimer = -5; 
             return;
         } else {
             bot.changeState('BLOCK');
@@ -526,15 +470,12 @@ function updateAI(bot, player, diff) {
         }
     }
 
-    // 2. Punir Recovery do Player
-    if (player.state === 'IDLE' && player.stateTimer > 0 /* está em recovery real */ && dist < 80) {
+    if (player.state === 'IDLE' && player.stateTimer > 0 && dist < 80) {
         if (bot.cds['ORA_ORA'] === 0) { bot.changeState('ATTACK', 'ORA_ORA'); return; }
         bot.changeState('ATTACK', 'MEDIUM'); return;
     }
 
-    // 3. Controle de Distância e Ofensiva
     if (dist > 150) {
-        // Longe: Anda ou usa Star Finger
         if (bot.cds['STAR_FINGER'] === 0 && Math.random() < (reactionChance * 0.05)) {
             bot.changeState('ATTACK', 'STAR_FINGER');
         } else {
@@ -542,13 +483,11 @@ function updateAI(bot, player, diff) {
             bot.state = 'WALK';
         }
     } else {
-        // Perto: Ataca
         bot.vx = 0;
-        if (Math.random() < (reactionChance * 0.05)) { // Decide atacar
+        if (Math.random() < (reactionChance * 0.05)) { 
             if (bot.cds['MACH_ORA'] === 0 && Math.random() < 0.5) bot.changeState('ATTACK', 'MACH_ORA');
             else bot.changeState('ATTACK', Math.random() > 0.5 ? 'LIGHT' : 'HEAVY');
         } else {
-            // Recuo tático (Difícil)
             if (diff === 3 && Math.random() < 0.02) {
                 bot.vx = -bot.speed * bot.facing * 1.5;
                 bot.state = 'WALK';
@@ -558,14 +497,11 @@ function updateAI(bot, player, diff) {
         }
     }
     
-    // 4. Time Stop Check (Apelação)
     if (bot.standActive && bot.cds['TIME_STOP'] === 0 && dist < 200 && diff > 1 && Math.random() < 0.01) {
         bot.changeState('ATTACK', 'TIME_STOP');
     }
 }
 
-
-// --- MAIN LOOP ---
 function initGame() {
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('ui').classList.remove('hidden');
@@ -573,35 +509,36 @@ function initGame() {
     p1 = new Fighter(100, 'p1', true);
     p2 = new Fighter(600, 'p2', false);
     
-    // Da stand pro bot no nivel dificil direto
     if(aiDifficulty === 3) p2.standActive = true; 
 
     gameState = 'PLAYING';
     requestAnimationFrame(gameLoop);
 }
 
+// --------------------------------------------------------
+// NOVO SISTEMA DE INPUT DE ATAQUE AQUI
+// --------------------------------------------------------
 function handleP1Input() {
     if (p1.state !== 'IDLE' && p1.state !== 'WALK' && p1.state !== 'JUMP') return;
     
     // Stand Toggle
-    if (input.keys.e) { p1.standActive = !p1.standActive; p1.changeState('ATTACK', 'STAND_TOGGLE'); input.keys.e = 0; return; }
+    if (input.keys.q) { p1.standActive = !p1.standActive; p1.changeState('ATTACK', 'STAND_TOGGLE'); input.keys.q = 0; return; }
 
-    // Buffer Specials Check
-    if (p1.standActive && p1.cds['TIME_STOP'] === 0 && input.checkMotion('s,s,e')) { p1.changeState('ATTACK', 'TIME_STOP'); return; }
-    if (p1.cds['STAR_FINGER'] === 0 && input.checkMotion('d,s,d,u', 500)) { p1.changeState('ATTACK', 'STAR_FINGER'); return; }
-    if (p1.cds['ORA_ORA'] === 0 && input.checkMotion('s,d,u')) { p1.changeState('ATTACK', 'ORA_ORA'); return; }
-    if (p1.cds['MACH_ORA'] === 0 && input.checkMotion('s,a,i')) { p1.changeState('ATTACK', 'MACH_ORA'); return; }
+    // Habilidades Especiais
+    if (p1.standActive && p1.cds['TIME_STOP'] === 0 && input.keys.g) { p1.changeState('ATTACK', 'TIME_STOP'); input.keys.g = 0; return; }
+    if (p1.cds['STAR_FINGER'] === 0 && input.keys.t) { p1.changeState('ATTACK', 'STAR_FINGER'); input.keys.t = 0; return; }
+    if (p1.cds['ORA_ORA'] === 0 && input.keys.e) { p1.changeState('ATTACK', 'ORA_ORA'); input.keys.e = 0; return; }
+    if (p1.cds['MACH_ORA'] === 0 && input.keys.r) { p1.changeState('ATTACK', 'MACH_ORA'); input.keys.r = 0; return; }
 
-    // Normals
-    if (input.keys.u) { p1.changeState('ATTACK', 'LIGHT'); return; }
-    if (input.keys.i) { p1.changeState('ATTACK', 'MEDIUM'); return; }
-    if (input.keys.o) { p1.changeState('ATTACK', 'HEAVY'); return; }
+    // Golpes Normais com o Mouse
+    if (input.keys.mouse0) { p1.changeState('ATTACK', 'LIGHT'); input.keys.mouse0 = 0; return; } // Botão Esquerdo
+    if (input.keys.mouse1) { p1.changeState('ATTACK', 'MEDIUM'); input.keys.mouse1 = 0; return; } // Roda do Mouse
+    if (input.keys.mouse2) { p1.changeState('ATTACK', 'HEAVY'); input.keys.mouse2 = 0; return; } // Botão Direito
 
     // Movimento e Defesa Base
     let isBlocking = (p1.facing === 1 && input.keys.a) || (p1.facing === -1 && input.keys.d);
     
     if (isBlocking) {
-        // O jogador está recuando. O block real ocorre quando a hitbox inimiga encostar (calculado no update)
         p1.vx = -2 * p1.facing;
         p1.state = 'WALK';
     } else if (input.keys.d) {
@@ -620,11 +557,9 @@ function handleP1Input() {
 function drawBackground() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Linha de chão Arcade
     ctx.strokeStyle = '#4a148c'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(0, FLOOR); ctx.lineTo(canvas.width, FLOOR); ctx.stroke();
     
-    // Grid sutil no fundo
     ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
     for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, FLOOR); ctx.stroke(); }
 }
@@ -649,7 +584,6 @@ function gameLoop() {
     p2.draw();
     drawVFX();
 
-    // Game Over check
     if (p1.hp <= 0 || p2.hp <= 0) {
         gameState = 'GAMEOVER';
         createVFX("K.O.", canvas.width/2 - 50, canvas.height/2, "#ff0000", true);
